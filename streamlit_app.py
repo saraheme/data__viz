@@ -8,12 +8,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
 import seaborn as sns
-import altair as alt 
+import altair as alt
 
 def df_aff(df):
-    st.header('Affichage de la base de données')
+    st.header('Affichage de la table')
     st.write(df)
-    st.info("La base de données contient " + str(len(df)) + " enregistrements et contient " + str(len(df.columns)) + " colonnes.")
+    st.info("La table contient " + str(len(df)) + " enregistrements et contient " + str(len(df.columns)) + " colonnes.")
 
 
 def df_desc(df):
@@ -21,7 +21,7 @@ def df_desc(df):
     st.write(df.describe()) #Description
     #Sélection d'une variable pour afficher son histogramme et boxplot
     st.write("Affichage histogramme et boxplot pour une variable donnée")
-    var_select = st.selectbox('Sélectionner une variable :', [col for col in df.columns if df[col].dtype != 'object'])
+    var_select = st.selectbox('Sélectionner une variable :', [col for col in df.columns if df[col].dtype != 'object']) #if df[col].dtype != 'object'
 
     hist = alt.Chart(df).mark_bar().encode(
         alt.X(var_select, bin=True),
@@ -65,8 +65,41 @@ def interactive_plot(df):
     col1, col2 = st.columns(2)
     x_axis_val = col1.selectbox("Sélectionnez l'axe X", options=df.columns,key="plot_var1")
     y_axis_val = col2.selectbox("Sélectionnez l'axe Y", options=df.columns,key="plot_var2")
-    plot = px.scatter(df, x=x_axis_val, y=y_axis_val)
-    st.plotly_chart(plot, use_container_width=True)
+    st.text("La colonne " + str(x_axis_val) + " est de type " + str(df[x_axis_val].dtypes))
+    st.text("La colonne " + str(y_axis_val) + " est de type " + str(df[y_axis_val].dtypes))
+
+
+
+
+    if (df[x_axis_val].dtypes == object and df[y_axis_val].dtypes != object ):
+        select_categories = st.multiselect(label = 'Sélectionner les variables pour lesquelles on affiche les boxplot :', options = ["All"] + df[x_axis_val].unique().tolist(),default="All")
+        if "All" in select_categories:
+            categories = df[x_axis_val].unique().tolist()
+        else:
+            categories = select_categories
+        data = [df[df[x_axis_val] == category][y_axis_val] for category in categories]
+        fig, ax = plt.subplots()
+        sns.boxplot(data=data, ax=ax)
+        ax.set_xticklabels(categories)
+        ax.set_title(f"Boxplot de '{x_axis_val}' par catégorie")
+        st.pyplot(fig)
+
+    elif (df[y_axis_val].dtypes == object and df[x_axis_val].dtypes != object):
+        select_categories = st.multiselect(label='Sélectionner les variables pour lesquelles on affiche les boxplot :',
+                                           options=["All"] + df[y_axis_val].unique().tolist(), default="All")
+        if "All" in select_categories:
+            categories = df[y_axis_val].unique().tolist()
+        else:
+            categories = select_categories
+        data = [df[df[y_axis_val] == category][x_axis_val] for category in categories]
+        fig, ax = plt.subplots()
+        sns.boxplot(data=data, ax=ax)
+        ax.set_xticklabels(categories)
+        ax.set_title(f"Boxplot de '{y_axis_val}' par catégorie")
+        st.pyplot(fig)
+    else:
+        plot = px.scatter(df, x=x_axis_val, y=y_axis_val)
+        st.plotly_chart(plot, use_container_width=True)
 
 
 
@@ -83,8 +116,8 @@ def reg_lin_multiple(df):
         #Modèle
         X = df[variables_explicatives]
         y = df[variable_expliquee]
-
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
+        select_test_size = st.number_input(label = "Sélectionnez la taille de la base test souhaitée (en pourcentage)",value=20)
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=select_test_size/100, random_state=0)
 
         # execution de la Régression linéaire
         reg = LinearRegression().fit(X_train, y_train)
@@ -144,8 +177,11 @@ def correlation(df):
     x_axis_val = col1.selectbox("Choix variable : ", options=df_quantitatif.columns, key="corr_var1")
     y_axis_val = col2.selectbox("Choix variable : ", options=df_quantitatif.columns, key="corr_var2")
     selected_columns = [x_axis_val,y_axis_val]
+    #Sélection du type de correlation
+    correlation_type = st.radio("Sélectionnez le type de corrélation souhaité :",options=['pearson','kendall','spearman'],horizontal=True)
+
     #Calcul de la corrélation
-    corr = df[selected_columns].corr()
+    corr = df[selected_columns].corr(method=correlation_type)
     #Tracé de la heatmap de corrélation
     fig, ax = plt.subplots()
     sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
@@ -160,71 +196,6 @@ def correlation(df):
     st.pyplot(fig)
 
 
-
-
-def reg_logistique(df):
-    selected_columns = st.multiselect(
-        'Sélectionnez les colonnes à inclure dans la régression (variables quantitatives)',list(df.columns))
-    if len(selected_columns) >= 2: #On a une variable expliquée et au moins une variable explicative
-        #Sélection de la variable expliquée
-        variable_expliquee = st.selectbox('Sélectionnez la variable dépendante (Y)', selected_columns)
-
-        #Sélection des variables explicatives
-        variables_explicatives = [col for col in selected_columns if col != variable_expliquee]
-
-        #Construction du modèle
-        X = df[variables_explicatives]
-        y = df[variable_expliquee]
-
-
-        #Diviser les données en ensembles d'entraînement et de test
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=0)
-
-        #Créer un objet de modèle de régression logistique
-        model = LogisticRegression()
-
-        #Entraîner le modèle sur les données d'entraînement
-        model.fit(X_train, y_train)
-
-        #Prédire les valeurs de sortie pour les données de test
-        y_pred = model.predict(X_test)
-
-        #Évaluer les performances du modèle
-        accuracy = metrics.accuracy_score(y_test, y_pred)
-        st.write("Accuracy (qualité de la prédiction):", accuracy)
-
-        st.write("Coefficients : ")
-        for i in range(len(variables_explicatives)):
-            st.info(str(variables_explicatives[i]) + " : " + str(model.coef_[0][i]))
-
-        # Linear
-        y_test_logistic = model.predict_proba(X=X_test)[:, 1]
-        fpr_log_test, tpr_log_test, _ = metrics.roc_curve(y_test.values, y_test_logistic)
-        roc_auc_log_test = metrics.auc(fpr_log_test, tpr_log_test)
-        st.write('Aire sous la courbe pour la base test :', roc_auc_log_test)
-
-        # %%ROC
-
-        # ROC plot
-        lw = 2
-        fig, ax = plt.subplots()
-        ax.plot(fpr_log_test, tpr_log_test, color='darkorange',
-                 lw=lw, label='ROC curve RF (area = %0.2f)' % roc_auc_log_test)
-        ax.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
-        ax.set_xlim([0.0, 1.0])
-        ax.set_ylim([0.0, 1.05])
-        ax.set_xlabel('False Positive Rate')
-        ax.set_ylabel('True Positive Rate')
-        ax.set_title('Courbe ROC')
-        ax.legend(loc="lower right")
-        st.pyplot(fig)
-
-
-
-
-
-
-
 st.title("Analyse d'un jeu de données")
 
 
@@ -232,27 +203,26 @@ st.sidebar.title('Importation')
 choix_separateur = st.sidebar.radio(label='Format séparateur', options=[',',';',' ','/','/t'], horizontal=True)
 choix_decimal = st.sidebar.radio(label='Format décimal', options=['.',','], horizontal=True)
 
-upload_file = st.sidebar.file_uploader('Importez votre base de données')
+upload_file = st.sidebar.file_uploader('Importez votre table')
 st.sidebar.title('Actions')
 #Sélection
 options = st.sidebar.radio('Quelle analyse voulez vous faire ?',
-                           ['Affichage de la base de données', 'Description du jeu de données','Répartition des valeurs de chaque colonne','Scatter Plot','Correlation','Régression linéaire','Régression logistique'])
+                           ['Affichage de la table', 'Description du jeu de données','Répartition des valeurs de chaque colonne','Visualisation','Correlation','Régression linéaire'])
 if upload_file is None:
-    st.text("Pour commencer importez une base de données")
+    st.text("Pour commencer importez une table.")
 else:
     df = pd.read_csv(upload_file,sep=choix_separateur, encoding='latin-1',decimal= choix_decimal)
 
-    if options == 'Affichage de la base de données':
+    if options == 'Affichage de la table':
         df_aff(df)
     elif options == 'Description du jeu de données':
         df_desc(df)
     elif options == 'Répartition des valeurs de chaque colonne':
         df_repartition(df)
-    elif options == 'Scatter Plot':
+    elif options == 'Visualisation':
         interactive_plot(df)
     elif options == 'Régression linéaire':
         reg_lin_multiple(df)
     elif options == 'Correlation':
         correlation(df)
-    elif options == 'Régression logistique':
-        reg_logistique(df)
+
